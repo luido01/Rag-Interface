@@ -1,0 +1,158 @@
+@page "/"
+
+<PageTitle>RAG Console</PageTitle>
+
+<section class="hero">
+    <h1>Ask your documents</h1>
+    <p>Use this interface as a starting point for your C#/Blazor RAG system. Configure retrieval options, submit a question, and inspect generated output with source citations.</p>
+</section>
+
+<section class="panel grid">
+    <div class="card">
+        <h2>Query</h2>
+
+        <label for="question">Question</label>
+        <textarea id="question" @bind="query.Text" placeholder="What does our onboarding policy say about contractors?" rows="4"></textarea>
+
+        <div class="row two-col">
+            <div>
+                <label for="collection">Knowledge collection</label>
+                <input id="collection" @bind="query.Collection" />
+            </div>
+            <div>
+                <label for="topK">Top K chunks</label>
+                <input id="topK" type="number" min="1" max="20" @bind="query.TopK" />
+            </div>
+        </div>
+
+        <div class="row two-col">
+            <div>
+                <label for="temperature">Temperature (@query.Temperature.ToString("0.0"))</label>
+                <input id="temperature" type="range" step="0.1" min="0" max="1.2" @bind="query.Temperature" />
+            </div>
+            <div>
+                <label for="model">Model</label>
+                <select id="model" @bind="query.Model">
+                    @foreach (var model in Models)
+                    {
+                        <option value="@model">@model</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn primary" @onclick="RunQuery" disabled="@isLoading">@(isLoading ? "Generating..." : "Generate Answer")</button>
+            <button class="btn" @onclick="Clear" disabled="@isLoading">Clear</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Response</h2>
+
+        @if (string.IsNullOrWhiteSpace(response.Answer))
+        {
+            <p class="muted">No answer yet. Run a query to preview the response format.</p>
+        }
+        else
+        {
+            <p>@response.Answer</p>
+
+            <h3>Sources</h3>
+            <ul>
+                @foreach (var source in response.Sources)
+                {
+                    <li>
+                        <strong>@source.Title</strong>
+                        <p>@source.Snippet</p>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</section>
+
+<section class="card history">
+    <h2>Recent activity</h2>
+    @if (!history.Any())
+    {
+        <p class="muted">Your submitted prompts will appear here.</p>
+    }
+    else
+    {
+        <ol>
+            @foreach (var item in history)
+            {
+                <li>
+                    <span>@item.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                    <strong>@item.Question</strong>
+                    <small>@item.Collection · top-@item.TopK · @item.Model</small>
+                </li>
+            }
+        </ol>
+    }
+</section>
+
+@code {
+    private static readonly string[] Models = ["gpt-4.1-mini", "gpt-4.1", "local-llm"];
+
+    private bool isLoading;
+    private RagQuery query = new();
+    private RagResponse response = new();
+    private readonly List<RagHistoryItem> history = [];
+
+    private async Task RunQuery()
+    {
+        if (string.IsNullOrWhiteSpace(query.Text))
+        {
+            response = new RagResponse
+            {
+                Answer = "Please provide a question before requesting an answer.",
+                Sources = []
+            };
+            return;
+        }
+
+        isLoading = true;
+
+        await Task.Delay(500);
+
+        response = new RagResponse
+        {
+            Answer = $"Sample answer for \"{query.Text}\" using collection \"{query.Collection}\" with top-{query.TopK} retrieval. Replace this with a call to your RAG API service.",
+            Sources =
+            [
+                new RagSource("Employee Handbook", "Section 4.2 mentions that contractors are onboarded through a separate approval path."),
+                new RagSource("Security Policy", "API keys must remain in Key Vault and never be embedded in client-side code.")
+            ]
+        };
+
+        history.Insert(0, new RagHistoryItem(DateTimeOffset.UtcNow, query.Text, query.Collection, query.TopK, query.Model));
+        isLoading = false;
+    }
+
+    private void Clear()
+    {
+        query = new RagQuery();
+        response = new RagResponse();
+    }
+
+    private sealed class RagQuery
+    {
+        public string Text { get; set; } = string.Empty;
+        public string Collection { get; set; } = "knowledge-base";
+        public int TopK { get; set; } = 4;
+        public double Temperature { get; set; } = 0.2;
+        public string Model { get; set; } = Models[0];
+    }
+
+    private sealed class RagResponse
+    {
+        public string Answer { get; set; } = string.Empty;
+        public List<RagSource> Sources { get; set; } = [];
+    }
+
+    private sealed record RagSource(string Title, string Snippet);
+
+    private sealed record RagHistoryItem(DateTimeOffset Timestamp, string Question, string Collection, int TopK, string Model);
+}
